@@ -40,7 +40,15 @@ class Book:
     def split_seg(self, window, segnum):
         if segnum < len(self.seglist):  # segnum is 0 based
             querytext = f'Splitting segment {self.seglist[segnum]}\n\nSplit where?'
-            split = sg.PopupGetText(querytext, 'Splitting segment...')
+            #split = sg.PopupGetText(querytext, 'Splitting segment...')
+            splwin = sg.Window('Splitting segment...', 
+                               [[sg.Text('Split at text:'), sg.InputText(focus=True)], 
+                               [sg.Push(), sg.OK(size=(10, 1)), sg.Cancel(size=(10, 1))]],
+                               grab_anywhere=True)
+            event, values = splwin.read()
+            splwin.close()
+            split = values[0]
+
             if split:
                 before, spl, after = self.seglist[segnum].partition(split)
                 self.seglist.insert(segnum, before.strip())
@@ -76,7 +84,15 @@ class Book:
         acceptletts = string.ascii_letters + string.digits + "![] ,'.;"
 
         if not text:
-            newseg = sg.PopupGetText('Text to add:', 'Adding segment...')
+            #newseg = sg.PopupGetText('Text to add:', 'Adding segment...')
+            newseg = sg.Window('Adding segment...', 
+                               [[sg.Text('Text to add:'), sg.InputText(focus=True)], 
+                               [sg.Push(), sg.OK(size=(10, 1)), sg.Cancel(size=(10, 1))]],
+                               grab_anywhere=True)
+            event, values = newseg.read()
+            newseg.close()
+            newseg = values[0]
+
             # sanitize input
             if newseg:
                 newseg = ''.join([x for x in newseg if x and x in acceptletts])
@@ -293,7 +309,8 @@ class Book:
                    '2Nd':'2nd', '3Rd':'3rd', '4Th':'4th', '5Th':'5th', '6Th':'6th',
                    '8Th':'8th', '9Th':'9th', '(ed)':'(ed.)', 'IIi':'III', '10Th':'10th',
                    'Mcp':'McP', 'Gui ':'GUI ', "O'r":"O'R", 'Mcd':'McD', 'Macl':'MacL',
-                   'Mcl':'McL', "n'T":"n't", ' As ':' as ', 'Ad ':'AD ', '0S':'0s'}
+                   'Mcl':'McL', "n'T":"n't", ' As ':' as ', 'Ad ':'AD ', '0S':'0s', 
+                   "'Ll":"'ll"}
 
         for x in range(len(self.seglist)):
             self.seglist[x] = self.seglist[x].title()
