@@ -33,19 +33,17 @@ class Book:
         self.name = ' - '.join([x for x in self.seglist])
         self.filename = self.name + self.ext
 
-    def edit_seg(self, window, segnum, text):
+    def edit_seg(self, segnum, text):
         self.seglist[segnum] = text
         self.reassemble_segs()
 
     def split_seg(self, window, segnum):
         if segnum < len(self.seglist):  # segnum is 0 based
-            querytext = f'Splitting segment {self.seglist[segnum]}\n\nSplit where?'
-            #split = sg.PopupGetText(querytext, 'Splitting segment...')
             splwin = sg.Window('Splitting segment...', 
                                [[sg.Text('Split at text:'), sg.InputText(focus=True)], 
                                [sg.Push(), sg.OK(size=(10, 1)), sg.Cancel(size=(10, 1))]],
                                grab_anywhere=True)
-            event, values = splwin.read()
+            values = splwin.read()[1]
             splwin.close()
             split = values[0]
 
@@ -80,7 +78,7 @@ class Book:
         else:
             update_statustxt(window, 'Segment number out of range.')
 
-    def add_seg(self, window, text=None, pos=None):
+    def add_seg(self, text=None, pos=None):
         acceptletts = string.ascii_letters + string.digits + "![] ,'.;"
 
         if not text:
@@ -89,7 +87,7 @@ class Book:
                                [[sg.Text('Text to add:'), sg.InputText(focus=True)], 
                                [sg.Push(), sg.OK(size=(10, 1)), sg.Cancel(size=(10, 1))]],
                                grab_anywhere=True)
-            event, values = newseg.read()
+            values = newseg.read()[1]
             newseg.close()
             newseg = values[0]
 
@@ -103,7 +101,7 @@ class Book:
                 self.seglist.append(newseg.strip())
             else: # insert rather than add on the end
                 self.seglist.insert(pos, newseg)
-            self.capitalize(window)
+            self.capitalize()
             self.reassemble_segs()
 
     def del_seg(self, window, segnum):
@@ -118,19 +116,20 @@ class Book:
         else:
             update_statustxt(window, "Attempt to delete a segment that doesn't exist.")
 
-    def by_replace(self, window):
+    def by_replace(self):
         # replace 'by' in book names by splitting
         for x, seg in enumerate(self.seglist):
             seg = seg.replace(' By ', ' by ')
             if ' by ' in seg:
-                beforeby, by, afterby = seg.partition(' by ')
+                beforeby, _, afterby = seg.partition(' by ')
                 self.seglist[x] = beforeby.strip(' ,-.')
                 self.seglist.insert(0, afterby.strip(' ,-.')) # this is probably author so move to front
         self.reassemble_segs()
 
-    def check_title(self, window, bookname):
+    def check_title(self, window):
         # runs a couple of checks to catch basic naming errors
-        if ',' not in self.seglist[0] and 'Various' not in self.seglist[0]: #sanity check for no comma in author's name
+        # sanity check for no comma in author's name
+        if ',' not in self.seglist[0] and 'Various' not in self.seglist[0]:
             query = 'The author does not seem to have their name reversed.\n\nProceed anyway?\n'
             go = sg.PopupYesNo(query, title='Move file?')
             if go == 'No':
@@ -154,7 +153,7 @@ class Book:
         elif movebook and self.get_size_int() > 5000:
             update_statustxt(window, 'Book size is over 5MB, move halted.')
         else:
-            if self.check_title(window, self.name):
+            if self.check_title(window):
                 update_statustxt(window, f'Renaming book to {newname}.')
                 try:
                     os.rename(self.filepath, newname)
@@ -182,7 +181,8 @@ class Book:
         ignoredwords =  ['The', 'And', 'To', 'Of', 'By', 'With', 'We', 'As']
         #take author's name as first filter, search in subset
         transtable = str.maketrans('', '', ',.&()-[]0123456789')
-        auth = self.seglist[0].split()[0].translate(transtable) # QQQ should check for short auth name like de la Mare
+        # QQQ should check for short auth name like de la Mare
+        auth = self.seglist[0].split()[0].translate(transtable) 
         rarlist = [x for x in os.listdir(_LOCS['OUTPUT_DIR']) if x[-4:] == '.rar']
         #rarlist = glob.glob(_LOCS['OUTPUT_DIR'] + '*.rar')
         # note that glob is not case sensitive
@@ -191,8 +191,9 @@ class Book:
         # if book name is only one segment, skip this and just search with author's name
         if len(self.seglist) > 1:
             # otherwise get first word of title, adjusting for series name
-            if len(self.seglist) <= 2 or '[' not in self.seglist[1] or "A Very Short Introduction" in self.seglist:
-                #for book titles with 1 or 2 segments, like AAA, BBB - CCC
+            if len(self.seglist) <= 2 or '[' not in self.seglist[1]\
+                or "A Very Short Introduction" in self.seglist:
+                # for book titles with 1 or 2 segments, like AAA, BBB - CCC
                 titlenum = 1
             else:
                 # for book titles with 3 or more segments, like Aaa, B - [GGG] - HHH - JJJ, get
@@ -204,7 +205,8 @@ class Book:
                 else: #fall back to using last segment
                     titlenum = len(self.seglist)- 1
 
-            title = [word for word in self.seglist[titlenum].split() if len(word) > 2 and word.capitalize() not in ignoredwords]
+            title = [word for word in self.seglist[titlenum].split()\
+                     if len(word) > 2 and word.capitalize() not in ignoredwords]
             if title:
                 title = title[0]
             else: # a title like '50 in 50' will cause title list to be empty, so make do with first bit anyway
@@ -242,7 +244,7 @@ class Book:
             try:
                 subprocess.call(convstr)
             except Exception as err:
-                update_statustxt(window, f'Error compressing file: {sys.exc_info()[0]}')
+                update_statustxt(window, f'Error compressing file: {sys.exc_info()[0]} - {err}')
                 return False
             else:
                 newbook = Book(new_filepath)
@@ -256,7 +258,8 @@ class Book:
         andloc = 0
 
         #should deal with (ed), (ed.) and Jr/Jr.
-        if '&' in inname: inname = inname.replace('&', 'and')
+        if '&' in inname: 
+            inname = inname.replace('&', 'and')
         revname = inname.split(' ')
         if revname[-1] == '(ed)' or revname[-1] == '(ed.)':
             del revname[-1]
@@ -278,7 +281,8 @@ class Book:
             revstr = self.format_name(' '.join(revname[:andloc])) + ' and ' \
                      + self.format_name(' '.join(revname[andloc + 1:]))
 
-        if edfound: revstr += ' (ed.)'
+        if edfound: 
+            revstr += ' (ed.)'
         if jrfound:
             #insert 'Jr.' just before first comma signifying end of surname
             firstcomm = revstr.find(",")
@@ -294,13 +298,13 @@ class Book:
             self.reassemble_segs()
             return self.seglist[segnum]
 
-    def capitalize(self, window):
+    def capitalize(self):
         fixdict = {'Ii':'II', 'And ':'and ', 'In ':'in ', 'Of ':'of ', 'To ':'to ',
                    'Rtf':'rtf', 'An ':'an ', 'The ':'the ', 'Iii ':'III ', 'De ':'de ',
                    'A ':'a ', "\x92S":"'s", "'S":"'s", 'Cia ':'C.I.A. ', 'Nasa':'NASA',
                    'Kgb':'KGB', 'Mig ':'MiG ', 'Viii':'VIII', ' Iv ':' IV ', 'Fbi ':'F.B.I. ',
                    'Mcc':'McC', '(Ed.)':'(ed.)', 'Et. Al.':'et. al.', 'Trans ':'trans. ',
-                   'On ':'on ', "'S":"'s", '1St':'1st', '7Th':'7th', '[Ssc]':'[SSC]',
+                   'On ':'on ', '1St':'1st', '7Th':'7th', '[Ssc]':'[SSC]',
                    'Et Al':'et. al.', 'Von ':'von ', 'Bc ':'BC ', 'Mch':'McH', 'Ss':'SS',
                    'Raf ':'R.A.F. ', "'S ":"'s ", 'Mcn':'McN', 'a. ':'A. ', ' Bc':' BC',
                    "’S":"'s", 'Wwii':'WWII', 'Mcm':'McM', 'Macn':'MacN', 'SSc':'SSC',
@@ -310,7 +314,7 @@ class Book:
                    '8Th':'8th', '9Th':'9th', '(ed)':'(ed.)', 'IIi':'III', '10Th':'10th',
                    'Mcp':'McP', 'Gui ':'GUI ', "O'r":"O'R", 'Mcd':'McD', 'Macl':'MacL',
                    'Mcl':'McL', "n'T":"n't", ' As ':' as ', 'Ad ':'AD ', '0S':'0s', 
-                   "'Ll":"'ll"}
+                   "'Ll":"'ll", 'Vs ':'vs '}
 
         for x in range(len(self.seglist)):
             self.seglist[x] = self.seglist[x].title()
@@ -363,7 +367,7 @@ def layout_window(booklist):
                   input_elements_background_color='gray25', #gray70
                   input_text_color='white',
                   button_color=(txtcol,'gray8'))
-    txtcols = generate_txtcols()
+    #txtcols = generate_txtcols()
 
     col = [[sg.Text('Author(s):', size=(9, 1), pad=((10, 1),(1, 1))),
             sg.Input(key='txt1', enable_events=True, size=(30, 1)),
@@ -464,7 +468,7 @@ def update_filelist(window, event, values):
     else:
         return None
 
-def show_help(window):
+def show_help():
     # ddd, u(ndo), f, fff, ca, cd, delseg, [X, ]X, 40k  '\n• '
     helptext = 'Available Commands:' \
     '\n• rX: Reverse segment X, defaults to first segment.' \
@@ -532,7 +536,7 @@ def move_to_next_book(window, lastbook=None):
     elif lastbook == 'revert':
          #if process_events.currbook.name != allbooks[process_events.currindex]:
             #allbooks
-         process_events.currindex += 1
+        process_events.currindex += 1
 
     window['filelist'].Update(values=allbooks, set_to_index=process_events.currindex,
                               scroll_to_index=process_events.currindex)
@@ -564,7 +568,7 @@ def process_txt_cmd(window, values, cmd):
     elif cmd == 'fd':
         process_events.currbook.dupefinder(window)
     elif cmd == 'by':
-        process_events.currbook.by_replace(window)
+        process_events.currbook.by_replace()
     elif cmd == 'rar':
         newbook = process_events.currbook.rar(window)
         if newbook: #update listbox filename too
@@ -572,7 +576,8 @@ def process_txt_cmd(window, values, cmd):
             update_filelist(window, None, values)
             move_to_specified_book(window, newbook)
     elif cmd[0] == 'r':  # reverse
-        if len(cmd) == 1: cmd += '1'  #allow just 'r' to reverse segment 1
+        if len(cmd) == 1:
+            cmd += '1'  #allow just 'r' to reverse segment 1
         segnum = int(cmd[1]) - 1
         oldseg = process_events.currbook.seglist[segnum]
         revseg = process_events.currbook.reverse_seg(window, segnum)
@@ -580,10 +585,10 @@ def process_txt_cmd(window, values, cmd):
     elif cmd == 'o':
         open_bookfile(window)
     elif cmd == 'h':
-        show_help(window)
+        show_help()
     elif cmd[0] == 'c': #capitalise segment and fix short words
         #if len(cmd) == 1: cmd = 'c1'
-        process_events.currbook.capitalize(window)
+        process_events.currbook.capitalize()
     elif cmd[:3] == 'spl': #split a segment:
         segnum = int(cmd[3]) - 1 if len(cmd) == 4 else 0  # segnum is 0-based not 1
         process_events.currbook.split_seg(window, segnum)
@@ -596,15 +601,16 @@ def process_txt_cmd(window, values, cmd):
             update_done_txt(window, True)
     elif cmd == 'f': # rename book but don't move
         res = process_events.currbook.finish(window, False)
-        if res: move_to_next_book(window, 'retain')
+        if res:
+            move_to_next_book(window, 'retain')
     elif cmd == 'as': # add a new segment
-        process_events.currbook.add_seg(window)
+        process_events.currbook.add_seg()
     elif cmd == '40k': # Ave Imperator!
-        process_events.currbook.add_seg(window, '[Warhammer 40,000', 1)
+        process_events.currbook.add_seg('[Warhammer 40,000', 1)
     elif cmd == 'ssc': #short story collection designator
-        process_events.currbook.add_seg(window, '[SSC]', 1)
+        process_events.currbook.add_seg('[SSC]', 1)
     elif cmd == 'trans': # add 'translated by'
-        process_events.currbook.add_seg(window, 'translated by ')
+        process_events.currbook.add_seg('translated by ')
     elif cmd == 'ed': # add (ed.) to end of author's name
         process_events.currbook.seglist[0] = process_events.currbook.seglist[0] + ' (ed.)'
         process_events.currbook.reassemble_segs()
@@ -621,7 +627,8 @@ def process_txt_cmd(window, values, cmd):
         process_events.currbook = Book(origname)
     elif cmd == 'ddd': # delete current file
         res = process_events.currbook.delete(window)
-        if res: move_to_next_book(window, 'delete')
+        if res:
+            move_to_next_book(window, 'delete')
     elif cmd[:2] == 'd-': # delete all hyphens from segment
         segnum = int(cmd[2]) if len(cmd) > 2 else 0
         process_events.currbook.seglist[segnum-1] = process_events.currbook.seglist[segnum-1].replace('-',' ')
@@ -680,7 +687,7 @@ def process_events(window, event, values):
     elif event == 'Open':
         open_bookfile(window)
     elif event == 'Help':
-        show_help(window)
+        show_help()
     elif event == 'Undo':
         origname = process_events.currbook.filepath
         process_events.currbook = Book(origname)
@@ -691,10 +698,12 @@ def process_events(window, event, values):
             update_done_txt(window, True)
     elif event == 'Finish':
         res = process_events.currbook.finish(window, False)
-        if res: move_to_next_book(window, 'retain')
+        if res:
+            move_to_next_book(window, 'retain')
     elif event == 'Delete':
         res = process_events.currbook.delete(window)
-        if res: move_to_next_book(window, 'delete')
+        if res:
+            move_to_next_book(window, 'delete')
     elif event == 'chklarge':
         update_filelist(window, event, values)
     elif 'delseg' in event: # one of the individual delete segment buttons
@@ -710,9 +719,9 @@ def process_events(window, event, values):
                 #validate data
                 txtboxdata = ''.join([x for x in txtboxdata if x in acceptletts])
                 if txtboxdata != process_events.currbook.seglist[num]:
-                    process_events.currbook.edit_seg(window, num, txtboxdata)
+                    process_events.currbook.edit_seg(num, txtboxdata)
             else:
-                update_statustxt(window, f'Error renaming book: invalid key.')
+                update_statustxt(window, 'Error renaming book: invalid key.')
 
     # if editing a text box, don't want focus to snap back to cmd txtbox
     display_currbook(window, values, event not in txtboxes)
