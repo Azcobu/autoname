@@ -4,7 +4,8 @@ import string, os, sys, subprocess, threading
 from random import shuffle
 from glob import glob
 from configparser import ConfigParser
-import PySimpleGUI as sg
+# import PySimpleGUI as sg # deprecated now PSG has gone closed source
+import FreeSimpleGUI as sg
 
 _LOCS = {'SCAN_DIR' : '', 'OUTPUT_DIR' : '', 'WINRAR_PATH': ''} # filled in by config parser and .ini file
 NUMBOXES = 5 # number of editing text boxes/segments used by the UI
